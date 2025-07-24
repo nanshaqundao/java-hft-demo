@@ -1,9 +1,11 @@
 package com.hft.memory.core;
 
 import com.hft.memory.pool.Resettable;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 
-public class Order implements Resettable {
+public class Order implements Resettable, Serializable {
+    private static final long serialVersionUID = 1L;
     // Use compact data types
     private int id;                    // 4 bytes
     private volatile long priceAndQty; // 8 bytes (price: high 32 bits, qty: low 32 bits)

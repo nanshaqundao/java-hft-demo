@@ -41,12 +41,19 @@ public class ObjectPool<T> {
             ((Resettable) object).reset();
         }
         
-        // Return to pool if not full
-        if (currentSize.get() < maxSize) {
-            pool.offer(object);
-            currentSize.incrementAndGet();
-        }
-        // Otherwise let GC collect it
+        // Atomically check and increment size using CAS
+        int currentSizeValue;
+        do {
+            currentSizeValue = currentSize.get();
+            if (currentSizeValue >= maxSize) {
+                // Pool is full, let GC collect the object
+                return;
+            }
+            // Try to increment atomically - retry if another thread changed it
+        } while (!currentSize.compareAndSet(currentSizeValue, currentSizeValue + 1));
+        
+        // Successfully reserved a slot, add to pool
+        pool.offer(object);
     }
     
     public int size() {

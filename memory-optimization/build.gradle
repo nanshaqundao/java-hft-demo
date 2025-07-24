@@ -28,14 +28,16 @@ dependencies {
 
 jmh {
     jmhVersion = '1.37'
-    warmupIterations = 1
-    iterations = 2
+    warmupIterations = 2
+    iterations = 3
     fork = 1
     timeUnit = 'ns'
     duplicateClassesStrategy = DuplicatesStrategy.WARN
-    resultFormat = 'CSV'  // Options: TEXT, CSV, SCSV, JSON, LATEX
+    resultFormat = 'CSV'
     humanOutputFile = project.file("${project.buildDir}/reports/jmh/human.txt")
     resultsFile = project.file("${project.buildDir}/reports/jmh/results.csv")
+    // Test with 4 threads to see concurrent performance
+    threads = 4
 }
 
 test {

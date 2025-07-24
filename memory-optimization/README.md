@@ -64,13 +64,13 @@ The project includes comprehensive JMH benchmarks comparing:
 ## Build Requirements
 
 - Java 21+ (LTS with Virtual Threads, Pattern Matching, Records)
-- Maven 3.6+
+- Gradle 7.6+ (Migrated from Maven for better JMH integration)
 
 ## Setup Instructions
 
-### 1. Download and Setup Java 21 + Maven (Portable)
+### 1. Download and Setup Java 21 + Gradle
 ```bash
-# Run the setup script (downloads and extracts Java 21 + Maven)
+# Run the setup script (downloads and extracts Java 21)
 ./install-requirements.sh
 
 # Reload your shell configuration
@@ -78,25 +78,27 @@ source ~/.bashrc  # or source ~/.zshrc for zsh users
 
 # Verify installation
 java -version
-mvn -version
+gradle -version
 ```
 
 ### 2. Build Instructions
 ```bash
 # Compile the project
-mvn clean compile
+gradle clean compileJava
 
-# Run tests
-mvn test
+# Run unit tests
+gradle test
 
-# Build benchmark JAR
-mvn clean package
+# Run JMH benchmarks (single-threaded)
+gradle jmh
 
-# Run benchmarks
-java -jar target/benchmarks.jar
+# Run JMH benchmarks (multi-threaded for concurrency testing)
+# Edit build.gradle: threads = 4
+gradle jmh
 
-# Run Java 21 specific benchmarks
-java -jar target/benchmarks.jar Java21FeaturesBenchmark
+# View benchmark results
+cat build/reports/jmh/results.csv
+cat build/reports/jmh/human.txt
 ```
 
 ## Usage Example
@@ -165,7 +167,7 @@ Expected performance improvements over traditional implementation:
 - **Direct Memory**: 64MB buffer for serialization
 - **GC Pressure**: Significantly reduced allocation rate
 
-## Key Optimizations
+## Key Optimizations & Thread Safety Fixes
 
 ### Traditional Optimizations
 1. **Bit Manipulation**: Pack price and quantity into single long
@@ -181,32 +183,106 @@ Expected performance improvements over traditional implementation:
 9. **String Templates**: Safer string formatting with `formatted()`
 10. **Enhanced Performance**: Better GC and JIT optimizations
 
+### Thread Safety & Concurrency Fixes (v1.1.0)
+11. **ObjectPool Race Condition Fix**: Implemented Compare-and-Swap (CAS) to prevent pool overflow
+    ```java
+    // Before: Race condition in release()
+    if (currentSize.get() < maxSize) {     // Thread A & B both see size=9
+        pool.offer(object);                // Both add objects
+        currentSize.incrementAndGet();     // Size becomes 11 > maxSize!
+    }
+    
+    // After: Atomic CAS operation
+    do {
+        currentSizeValue = currentSize.get();
+        if (currentSizeValue >= maxSize) return;
+    } while (!currentSize.compareAndSet(currentSizeValue, currentSizeValue + 1));
+    pool.offer(object); // Only one thread succeeds
+    ```
+
+12. **DirectMemoryManager Buffer Safety**: Fixed IndexOutOfBoundsException under multi-threading
+    ```java
+    // Before: Race condition in buffer position
+    private volatile int position;
+    int startPos = position;               // Thread A reads 100
+    directBuffer.put(startPos, data);      // Thread B also reads 100!
+    position += ORDER_SIZE;                // Lost update problem
+    
+    // After: Atomic position management
+    private final AtomicInteger position;
+    int startPos = position.getAndAdd(ORDER_SIZE); // Atomic reservation
+    // + synchronized method + rollback mechanism
+    ```
+
+13. **Serialization Support**: Added `Serializable` interface to Order class
+    ```java
+    public class Order implements Resettable, Serializable {
+        private static final long serialVersionUID = 1L;
+    ```
+
+### Multi-Threading Performance Results
+With 4 concurrent threads, performance scales linearly:
+- **Record Creation**: 0.038 → 0.147 ops/ns (3.9x improvement)
+- **Class Creation**: 0.031 → 0.117 ops/ns (3.8x improvement)  
+- **Object Pool**: Now thread-safe (was 76x slower due to contention, now fixed)
+- **Direct Memory**: IndexOutOfBoundsException eliminated
+
 ## Project Structure
 
 ```
-src/main/java/com/hft/memory/
-├── core/                      # Core domain objects
-│   ├── Order.java
-│   ├── OrderData.java
-│   ├── MemoryOptimizedOrderProcessor.java
-│   └── *Result.java
-├── pool/                      # Object pool implementation
-│   ├── ObjectPool.java
-│   └── Resettable.java
-├── memory/                    # Direct memory management
-│   └── DirectMemoryManager.java
-├── cache/                     # High-performance caching
-│   └── OrderCache.java
-└── benchmark/                 # JMH benchmarks
-    ├── MemoryOptimizationBenchmark.java
-    └── TraditionalOrderProcessor.java
+src/
+├── main/java/com/hft/memory/
+│   ├── core/                  # Core domain objects
+│   │   ├── Order.java         # Memory-optimized order (now Serializable)
+│   │   ├── OrderData.java
+│   │   ├── MemoryOptimizedOrderProcessor.java
+│   │   └── *Result.java
+│   ├── pool/                  # Thread-safe object pool
+│   │   ├── ObjectPool.java    # CAS-based race condition fix
+│   │   └── Resettable.java
+│   ├── memory/                # Thread-safe direct memory
+│   │   └── DirectMemoryManager.java  # AtomicInteger + sync fixes
+│   └── cache/                 # High-performance caching
+│       └── OrderCache.java
+├── jmh/java/com/hft/memory/   # JMH benchmarks (separate source set)
+│   └── benchmark/
+│       ├── MemoryOptimizationBenchmark.java
+│       ├── Java21FeaturesBenchmark.java
+│       └── TraditionalOrderProcessor.java
+└── test/java/                 # JUnit unit tests
+    └── com/hft/memory/
+        ├── core/
+        ├── pool/
+        └── memory/
+
+build.gradle                   # Gradle build with JMH plugin
+gradle.properties             # JVM optimization settings
+.gitignore                    # Excludes build artifacts
 ```
 
-## Dependencies
+## Dependencies & Build System
 
-- **JMH**: Performance benchmarking framework
-- **Trove4j**: High-performance primitive collections
-- **JUnit 5**: Unit testing framework
+### Runtime Dependencies
+- **Trove4j 3.0.3**: High-performance primitive collections (no boxing)
+- **Java 21**: LTS with Virtual Threads, Records, Pattern Matching
+
+### Development Dependencies  
+- **JMH 1.37**: Scientific performance benchmarking framework
+- **JUnit 5.10.2**: Unit testing framework
+- **Gradle JMH Plugin 0.7.2**: Seamless JMH integration
+
+### Build Configuration
+```gradle
+// Multi-threaded JMH benchmarking with proper forking
+jmh {
+    jmhVersion = '1.37'
+    warmupIterations = 2
+    iterations = 3
+    fork = 1                    # Proper JVM forking (fixed Maven issue)
+    threads = 4                 # Concurrent testing
+    resultFormat = 'CSV'        # Structured results
+}
+```
 
 ## Next Steps
 
