@@ -68,6 +68,12 @@ public class Order implements Resettable, Serializable {
     
     // Symbol optimization: use index for common symbols, reduce String objects
     public void setSymbol(String symbol) {
+        if (symbol == null) {
+            this.symbolIndex = -1;
+            this.customSymbol = null;
+            return;
+        }
+        
         for (int i = 0; i < COMMON_SYMBOLS.length; i++) {
             if (COMMON_SYMBOLS[i].equals(symbol)) {
                 this.symbolIndex = (byte) i;
