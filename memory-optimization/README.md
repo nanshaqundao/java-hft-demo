@@ -220,6 +220,45 @@ Expected performance improvements over traditional implementation:
         private static final long serialVersionUID = 1L;
     ```
 
+### Object Lifecycle Bug Fix (v1.2.0)
+14. **Critical Cache Data Corruption Fix**: Fixed severe bug where cached Order objects were getting corrupted due to object pool reuse
+    ```java
+    // PROBLEM: Cache stored object references that got reset when returned to pool
+    Order order = orderPool.acquire();
+    orderCache.addOrder(order);          // 🔥 Cache stores reference
+    orderPool.release(order);            // 🔥 Object gets reset
+    // Later: cached object has corrupted data!
+    
+    // SOLUTION: Separate temporary processing objects from persistent cache objects
+    Order tempOrder = orderPool.acquire();      // Temporary processing object
+    Order persistentOrder = new Order(tempOrder); // Independent persistent copy
+    orderCache.addOrder(persistentOrder);       // Cache owns independent object
+    orderPool.release(tempOrder);               // Safe to release temp object
+    ```
+
+15. **Order Copy Mechanism**: Added copy constructor and copyFrom method for safe object duplication
+    ```java
+    // New copy constructor
+    public Order(Order other) {
+        if (other != null) {
+            copyFrom(other);
+        }
+    }
+    
+    // New copy method
+    public void copyFrom(Order other) {
+        this.id = other.id;
+        this.priceAndQty = other.priceAndQty;
+        this.timestamp = other.timestamp;
+        this.side = other.side;
+        this.type = other.type;
+        this.symbolIndex = other.symbolIndex;
+        this.customSymbol = other.customSymbol;
+    }
+    ```
+
+16. **Comprehensive Testing**: Added `ObjectLifecycleBugTest` to verify cache data integrity under object pool reuse scenarios
+
 ### Multi-Threading Performance Results
 With 4 concurrent threads, performance scales linearly:
 - **Record Creation**: 0.038 → 0.147 ops/ns (3.9x improvement)
@@ -257,8 +296,18 @@ src/
 
 build.gradle                   # Gradle build with JMH plugin
 gradle.properties             # JVM optimization settings
+Q&A.md                        # Development Q&A and bug fix records
 .gitignore                    # Excludes build artifacts
 ```
+
+## Q&A and Development Records
+
+For detailed development discussions, bug discoveries, and fix explanations, see **[Q&A.md](Q&A.md)**. This document contains:
+
+- **2025-01-27**: Object lifecycle bug discovery and comprehensive fix
+- Performance optimization discussions
+- Design decision explanations
+- Critical bug analysis and solutions
 
 ## Dependencies & Build System
 

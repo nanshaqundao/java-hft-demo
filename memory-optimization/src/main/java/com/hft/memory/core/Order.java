@@ -32,6 +32,24 @@ public class Order implements Resettable, Serializable {
         this.type = 2; // LIMIT
     }
     
+    // Copy constructor for safe object duplication
+    public Order(Order other) {
+        if (other != null) {
+            copyFrom(other);
+        }
+    }
+    
+    // Copy data from another Order instance (for cache persistence)
+    public void copyFrom(Order other) {
+        this.id = other.id;
+        this.priceAndQty = other.priceAndQty;
+        this.timestamp = other.timestamp;
+        this.side = other.side;
+        this.type = other.type;
+        this.symbolIndex = other.symbolIndex;
+        this.customSymbol = other.customSymbol;
+    }
+    
     // Bit manipulation optimization: pack price and quantity into one long
     public void setPriceAndQuantity(double price, int quantity) {
         long priceBits = Double.doubleToRawLongBits(price);

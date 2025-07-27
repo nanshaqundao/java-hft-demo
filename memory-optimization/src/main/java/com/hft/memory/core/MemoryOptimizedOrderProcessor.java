@@ -32,22 +32,25 @@ public class MemoryOptimizedOrderProcessor {
     public ProcessingResult processOrder(OrderData orderData) {
         long startTime = System.nanoTime();
         
-        Order order = orderPool.acquire();
+        Order tempOrder = orderPool.acquire(); // Temporary processing object
         try {
-            // Data conversion
-            order.setId(orderData.getId());
-            order.setSymbol(orderData.getSymbol());
-            order.setPrice(orderData.getPrice());
-            order.setQuantity(orderData.getQuantity());
-            order.setSide(orderData.getSide());
-            order.setTimestamp(startTime);
+            // Data conversion using temporary order
+            tempOrder.setId(orderData.getId());
+            tempOrder.setSymbol(orderData.getSymbol());
+            tempOrder.setPrice(orderData.getPrice());
+            tempOrder.setQuantity(orderData.getQuantity());
+            tempOrder.setSide(orderData.getSide());
+            tempOrder.setTimestamp(startTime);
             
-            // Business processing
-            validateOrder(order);
-            orderCache.addOrder(order);
+            // Business processing validation
+            validateOrder(tempOrder);
             
-            // Serialize to direct memory
-            boolean serialized = memoryManager.serializeOrder(order);
+            // Create a persistent copy for cache (fixes object lifecycle bug)
+            Order persistentOrder = new Order(tempOrder);
+            orderCache.addOrder(persistentOrder);
+            
+            // Serialize the temporary order to direct memory
+            boolean serialized = memoryManager.serializeOrder(tempOrder);
             
             // Update statistics  
             processedCount.incrementAndGet();
@@ -59,7 +62,8 @@ public class MemoryOptimizedOrderProcessor {
         } catch (Exception e) {
             return new ProcessingResult(false, System.nanoTime() - startTime, false, e);
         } finally {
-            orderPool.release(order);
+            // Safe to release the temporary object as cache has its own copy
+            orderPool.release(tempOrder);
         }
     }
     
@@ -72,30 +76,34 @@ public class MemoryOptimizedOrderProcessor {
         long startTime = System.nanoTime();
         int successCount = 0;
         int failureCount = 0;
-        List<Order> orderBatch = new ArrayList<>(BATCH_SIZE);
+        List<Order> tempOrderBatch = new ArrayList<>(BATCH_SIZE);
         
         try {
-            // Batch acquire order objects
+            // Batch acquire temporary order objects
             for (int i = 0; i < orderDataList.size(); i++) {
-                Order order = orderPool.acquire();
-                orderBatch.add(order);
+                Order tempOrder = orderPool.acquire();
+                tempOrderBatch.add(tempOrder);
             }
             
-            // Batch data conversion
+            // Batch data conversion and processing
             for (int i = 0; i < orderDataList.size(); i++) {
                 OrderData data = orderDataList.get(i);
-                Order order = orderBatch.get(i);
+                Order tempOrder = tempOrderBatch.get(i);
                 
                 try {
-                    order.setId(data.getId());
-                    order.setSymbol(data.getSymbol());
-                    order.setPrice(data.getPrice());
-                    order.setQuantity(data.getQuantity());
-                    order.setSide(data.getSide());
-                    order.setTimestamp(System.nanoTime());
+                    // Set data on temporary order
+                    tempOrder.setId(data.getId());
+                    tempOrder.setSymbol(data.getSymbol());
+                    tempOrder.setPrice(data.getPrice());
+                    tempOrder.setQuantity(data.getQuantity());
+                    tempOrder.setSide(data.getSide());
+                    tempOrder.setTimestamp(System.nanoTime());
                     
-                    validateOrder(order);
-                    orderCache.addOrder(order);
+                    validateOrder(tempOrder);
+                    
+                    // Create persistent copy for cache (fixes object lifecycle bug)
+                    Order persistentOrder = new Order(tempOrder);
+                    orderCache.addOrder(persistentOrder);
                     successCount++;
                     
                 } catch (Exception e) {
@@ -104,8 +112,8 @@ public class MemoryOptimizedOrderProcessor {
                 }
             }
             
-            // Batch serialization
-            int serializedCount = memoryManager.serializeOrderBatch(orderBatch);
+            // Batch serialization using temporary orders
+            int serializedCount = memoryManager.serializeOrderBatch(tempOrderBatch);
             
             // Batch statistics update
             processedCount.addAndGet(successCount);
@@ -116,10 +124,10 @@ public class MemoryOptimizedOrderProcessor {
                                            totalTime, serializedCount);
             
         } finally {
-            // Batch return objects
-            for (Order order : orderBatch) {
-                if (order != null) {
-                    orderPool.release(order);
+            // Safe to release temporary objects as cache has its own copies
+            for (Order tempOrder : tempOrderBatch) {
+                if (tempOrder != null) {
+                    orderPool.release(tempOrder);
                 }
             }
         }
