@@ -1,0 +1,128 @@
+mindmap
+  root((Java HFT Memory Optimization))
+    1[项目架构与核心概念]
+      1.1[HFT系统设计理念]
+        延迟可预测性优先
+        正确性优先原则
+        数据驱动决策
+      1.2[内存优化策略]
+        Object Pool Pattern
+        Direct Memory Management
+        Primitive Collections
+        Memory Layout Optimization
+      1.3[核心组件设计]
+        Order对象优化
+        ObjectPool线程安全
+        OrderCache高性能
+        DirectMemoryStrategy演进
+    
+    2[关键问题发现与解决]
+      2.1[ObjectPool线程安全 v1.1.0]
+        问题：竞态条件pool overflow
+        解决：CAS操作防止竞态
+        学习：原子操作重要性
+      2.2[DirectMemory缓冲区安全 v1.1.0]
+        问题：IndexOutOfBoundsException
+        解决：AtomicInteger position管理
+        学习：volatile vs AtomicXxx
+      2.3[对象生命周期Bug v1.2.0]
+        问题：缓存数据损坏
+        解决：分离临时与持久对象
+        学习：对象共享vs拷贝权衡
+      2.4[线程安全优化 v1.3.0]
+        问题：synchronized+CAS双重开销
+        解决：简化为纯synchronized
+        学习：性能优化需要测量
+    
+    3[DirectMemoryStrategy演进 v1.4.0]
+      3.1[从妥协到科学验证转变]
+        妥协阶段：选择synchronized
+        转变契机：需要验证性能
+        科学验证：多策略数据驱动
+      3.2[四种并发策略]
+        SynchronizedDirectMemory
+          传统synchronized关键字
+          中等并发简单可靠
+        CASDirectMemory
+          CompareAndSwap无锁
+          版本号防ABA问题
+          指数退避重试机制
+        ReadWriteLockDirectMemory
+          ReentrantReadWriteLock
+          并发读取独占写入
+          批量优化减少锁获取
+        SegmentedLockDirectMemory
+          16个ReentrantLock分段
+          Hash分段负载均衡
+          段独立并行操作
+      3.3[策略选择决策树]
+        单线程低并发→Synchronized
+        高并发写入密集→SegmentedLock
+        读多写少70%→ReadWriteLock
+        极致性能追求→CAS
+    
+    4[测试框架与质量保证]
+      4.1[单元测试架构28用例]
+        Template Method设计模式
+        DirectMemoryStrategyTestBase抽象基类
+        策略特化测试
+        对比测试修复SegmentedLock阈值
+        快速验证30秒CI/CD
+      4.2[JMH性能测试框架66方法]
+        DirectMemoryStrategyBenchmark29方法
+        QuickBenchmark9方法快速验证
+        组件级基准28方法
+        Gradle插件集成CSV输出
+      4.3[测试自动化]
+        test-strategies.sh功能验证
+        run-benchmark.sh多模式测试
+        list-benchmarks.sh清单工具
+        Gradle统一构建流程
+    
+    5[性能优化学习要点]
+      5.1[并发编程核心概念]
+        volatile vs AtomicXxx
+        CAS操作与ABA问题
+        锁类型选择策略
+        内存模型happens-before
+      5.2[性能测量与分析]
+        JMH最佳实践
+        性能指标选择
+        瓶颈识别方法
+      5.3[HFT系统特殊考虑]
+        延迟可预测性
+        内存管理策略
+        系统调优方法
+    
+    6[工具链与开发流程]
+      6.1[构建系统演进]
+        Maven到Gradle迁移
+        Java21 LTS选择
+      6.2[测试工具链]
+        JUnit5单元测试
+        JMH1.37性能基准
+        Gradle Test集成
+        自动化脚本便捷执行
+      6.3[文档与知识管理]
+        README项目概览
+        docs目录分析文档
+        Q&A问题解决记录
+        TODO开发计划
+        TECHNICAL_KNOWLEDGE_MAP
+    
+    7[未来发展方向]
+      7.1[技术深化]
+        动态内存分配
+        混合策略负载自适应
+        无锁数据结构
+        NUMA优化
+      7.2[系统集成]
+        完整交易系统
+        网络优化零拷贝
+        监控系统实时指标
+        分布式扩展
+      7.3[学习路径]
+        深入并发编程
+        系统调优优化
+        架构设计
+        领域知识金融系统
