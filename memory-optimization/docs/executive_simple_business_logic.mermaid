@@ -1,0 +1,22 @@
+flowchart TB
+    A[Core Business Question<br/>• Why does taking first result work<br/>• API response order changes<br/>• How is system producing correct results<br/>• Is this behavior intentional or bug] --> B
+    
+    B --> C[Answer Unknown<br/>• Cannot migrate safely<br/>• Risk of breaking business logic<br/>• May introduce data inconsistency]
+    
+    subgraph B [Investigation]
+        D[Investigation Problems<br/>• No local debugging possible<br/>• UAT environment contention<br/>• Complex legacy system<br/>• No business SME identified<br/>• Limited time 5 months]
+        
+        E[Investigation Methods<br/>• Add logging to UAT deployments<br/>• Coordinate UAT access slots<br/>• Deploy minimal production logging<br/>• Search historical documentation<br/>• Find retired employees with knowledge]
+    end
+
+    classDef question fill:#ffcdd2,stroke:#d32f2f,stroke-width:3px,color:#000
+    classDef investigation fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000
+    classDef problems fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef methods fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef unknown fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#000
+    
+    class A question
+    class B investigation
+    class D problems
+    class E methods
+    class C unknown
