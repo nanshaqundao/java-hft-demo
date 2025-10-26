@@ -1,0 +1,4 @@
+rootProject.name = 'lock-free-price-engine'
+
+// 启用功能预览
+enableFeaturePreview('TYPESAFE_PROJECT_ACCESSORS')

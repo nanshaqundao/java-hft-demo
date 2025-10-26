@@ -1,0 +1,238 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'me.champeau.jmh' version '0.7.2'
+}
+
+group = 'com.hft.lockfree'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    // 核心依赖版本管理
+    disruptorVersion = '3.4.4'
+    jmhVersion = '1.37'
+    hdrHistogramVersion = '2.1.12'
+    affinityVersion = '3.21ea0'
+    slf4jVersion = '2.0.9'
+    junitVersion = '5.10.0'
+    logbackVersion = '1.4.11'
+}
+
+dependencies {
+    // LMAX Disruptor: 高性能无锁环形队列
+    implementation "com.lmax:disruptor:${disruptorVersion}"
+    
+    // HdrHistogram: 高精度延迟统计
+    implementation "org.hdrhistogram:HdrHistogram:${hdrHistogramVersion}"
+    
+    // Java Thread Affinity: CPU亲和性支持
+    implementation "net.openhft:affinity:${affinityVersion}"
+    
+    // 日志框架
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+    
+    // JMH基准测试 (通过jmh插件自动管理)
+    jmh "org.openjdk.jmh:jmh-core:${jmhVersion}"
+    jmh "org.openjdk.jmh:jmh-generator-annprocess:${jmhVersion}"
+    
+    // 测试框架
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junitVersion}"
+    
+    // 测试运行时
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+// JMH配置
+jmh {
+    // JMH版本
+    jmhVersion = project.ext.jmhVersion
+    
+    // 包含所有基准测试
+    includes = ['.*']
+    
+    // 排除模式（可选）
+    // excludes = ['.*slow.*']
+    
+    // 预热迭代次数
+    warmupIterations = 3
+    
+    // 测量迭代次数  
+    iterations = 5
+    
+    // 每次迭代持续时间（秒）
+    timeOnIteration = '1s'
+    
+    // Fork进程数量
+    fork = 1
+    
+    // 时间单位
+    timeUnit = 'ns'
+    
+    // 基准测试模式
+    benchmarkMode = ['thrpt', 'avgt']
+    
+    // 输出格式
+    resultFormat = 'CSV'
+    humanOutputFile = project.file("${project.buildDir}/reports/jmh/human.txt")
+    resultsFile = project.file("${project.buildDir}/reports/jmh/results.csv")
+    // JVM参数（选择单一GC，避免冲突）
+    jvmArgs = [
+        '-server',
+        '-Xms2g',
+        '-Xmx2g',
+        '-XX:+UseZGC',
+        '-XX:MaxGCPauseMillis=1',
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED'
+    ]
+    
+    // 分析器（可选）
+    // profilers = ['gc']
+}
+
+// 测试配置
+test {
+    useJUnitPlatform()
+    
+    // 测试JVM参数
+    jvmArgs = [
+        '-Xms1g',
+        '-Xmx1g', 
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED'
+    ]
+    
+    // 并行测试
+    maxParallelForks = Runtime.runtime.availableProcessors()
+    
+    // 测试日志
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = false
+    }
+}
+
+// 编译配置
+compileJava {
+    options.compilerArgs += [
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED'
+    ]
+}
+
+// 应用程序主类
+application {
+    mainClass = 'com.hft.lockfree.engine.LockFreePriceEngineDemo'
+}
+
+// 自定义任务：快速基准测试（使用可执行JMH Jar）
+task quickBenchmark(type: Exec) {
+    dependsOn 'jmhJar'
+    group = 'benchmark'
+    description = '运行快速基准测试（适合开发阶段），通过JMH可执行Jar'
+
+    doFirst {
+        file("${buildDir}/reports/jmh").mkdirs()
+    }
+
+    def javaHome = findProperty('org.gradle.java.home') ?: System.getProperty('java.home')
+    def jarPath = "${buildDir}/libs/${project.name}-${version}-jmh.jar"
+    def resultsPath = "${buildDir}/reports/jmh/quick-results.csv"
+
+    commandLine "${javaHome}/bin/java",
+        '-Xms1g', '-Xmx1g',
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED',
+        '-jar', jarPath,
+        '.*Quick.*',
+        '-wi', '1',
+        '-i', '3',
+        '-f', '1',
+        '-rf', 'csv',
+        '-rff', resultsPath,
+        '-tu', 'ns'
+}
+
+
+// 自定义任务：延迟基准测试（使用可执行JMH Jar）
+task latencyBenchmark(type: Exec) {
+    dependsOn 'jmhJar'
+    group = 'benchmark'
+    description = '运行延迟专项基准测试，通过JMH可执行Jar'
+    
+    doFirst {
+        file("${buildDir}/reports/jmh").mkdirs()
+    }
+    
+    def javaHome = findProperty('org.gradle.java.home') ?: System.getProperty('java.home')
+    def jarPath = "${buildDir}/libs/${project.name}-${version}-jmh.jar"
+    def resultsPath = "${buildDir}/reports/jmh/latency-results.csv"
+    
+    commandLine "${javaHome}/bin/java",
+        '-Xms2g', '-Xmx2g',
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED',
+        '-jar', jarPath,
+        '.*Latency.*',
+        '-wi', '5',
+        '-i', '10',
+        '-f', '1',
+        '-bm', 'avgt',
+        '-tu', 'ns',
+        '-rf', 'csv',
+        '-rff', resultsPath
+}
+
+// 自定义任务：吞吐量基准测试（使用可执行JMH Jar）
+task throughputBenchmark(type: Exec) {
+    dependsOn 'jmhJar'
+    group = 'benchmark'
+    description = '运行吞吐量专项基准测试，通过JMH可执行Jar'
+
+    doFirst {
+        file("${buildDir}/reports/jmh").mkdirs()
+    }
+
+    def javaHome = findProperty('org.gradle.java.home') ?: System.getProperty('java.home')
+    def jarPath = "${buildDir}/libs/${project.name}-${version}-jmh.jar"
+    def resultsPath = "${buildDir}/reports/jmh/throughput-results.csv"
+
+    commandLine "${javaHome}/bin/java",
+        '-Xms2g', '-Xmx2g',
+        '--add-exports', 'jdk.unsupported/sun.misc=ALL-UNNAMED',
+        '-jar', jarPath,
+        '.*Throughput.*',
+        '-wi', '3',
+        '-i', '5',
+        '-f', '1',
+        '-bm', 'thrpt',
+        '-tu', 's',
+        '-rf', 'csv',
+        '-rff', resultsPath
+}
+
+// Gradle wrapper配置
+wrapper {
+    gradleVersion = '8.4'
+    distributionType = Wrapper.DistributionType.ALL
+}
+
+// 输出目录确保创建
+task ensureReportsDir {
+    doLast {
+        file('build/reports/jmh').mkdirs()
+    }
+}
+
+// 确保在基准测试前创建输出目录
+tasks.jmh.dependsOn ensureReportsDir
+quickBenchmark.dependsOn ensureReportsDir
+latencyBenchmark.dependsOn ensureReportsDir
+throughputBenchmark.dependsOn ensureReportsDir
