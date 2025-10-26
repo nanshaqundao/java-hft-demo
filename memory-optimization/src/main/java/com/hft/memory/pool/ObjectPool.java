@@ -4,6 +4,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
+/**
+ * A generic, thread-safe object pool that can be used to manage expensive-to-create objects.
+ * <p>
+ * The pool is pre-warmed with a certain number of objects and has a maximum size.
+ * When an object is released, it is automatically reset if it implements the {@link Resettable} interface.
+ * This implementation uses a {@link ConcurrentLinkedQueue} for storing the pooled objects and
+ * {@link AtomicInteger} with CAS operations to safely manage the pool size under concurrent access,
+ * preventing race conditions where the pool might exceed its maximum size.
+ * </p>
+ *
+ * @param <T> The type of objects to be stored in the pool.
+ */
 public class ObjectPool<T> {
     private final ConcurrentLinkedQueue<T> pool;
     private final Supplier<T> factory;
